@@ -201,3 +201,6 @@ def handler(request):
             "remains": remains
         })
     }
+
+# ---------- Explicitly expose 'app' for Vercel ----------
+app = handler
