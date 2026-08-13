@@ -1,12 +1,13 @@
 import json
 import base64
 from typing import Optional, Tuple
+from urllib.parse import parse_qs
 
 import requests
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# ---------- Protobuf definitions (no validation) ----------
+# ---------- Protobuf definitions ----------
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import symbol_database as _symbol_database
@@ -143,36 +144,45 @@ def get_stats(jwt: str) -> Tuple[int, str]:
     except Exception as e:
         return -1, f"Exception: {str(e)}"
 
-# ---------- Vercel handler ----------
-def handler(request):
-    uid_str = request.args.get("uid")
-    password = request.args.get("password")
+# ---------- WSGI application ----------
+def app(environ, start_response):
+    # Parse query string
+    qs = parse_qs(environ.get('QUERY_STRING', ''))
+    uid_str = qs.get('uid', [None])[0]
+    password = qs.get('password', [None])[0]
+
     if not uid_str or not password:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"error": "Missing uid or password"})
-        }
+        status = '400 Bad Request'
+        headers = [('Content-Type', 'application/json')]
+        body = json.dumps({"error": "Missing uid or password"}).encode('utf-8')
+        start_response(status, headers)
+        return [body]
+
     try:
         uid = int(uid_str)
     except ValueError:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"error": "uid must be an integer"})
-        }
+        status = '400 Bad Request'
+        headers = [('Content-Type', 'application/json')]
+        body = json.dumps({"error": "uid must be an integer"}).encode('utf-8')
+        start_response(status, headers)
+        return [body]
 
     jwt = _gEtMyJwT(uid, password)
     if not jwt:
-        return {
-            "statusCode": 401,
-            "body": json.dumps({"error": "Failed to obtain JWT"})
-        }
+        status = '401 Unauthorized'
+        headers = [('Content-Type', 'application/json')]
+        body = json.dumps({"error": "Failed to obtain JWT"}).encode('utf-8')
+        start_response(status, headers)
+        return [body]
 
     total, stats_err = get_stats(jwt)
     if total < 0:
-        return {
-            "statusCode": 502,
-            "body": json.dumps({"error": stats_err})
-        }
+        status = '502 Bad Gateway'
+        headers = [('Content-Type', 'application/json')]
+        body = json.dumps({"error": stats_err}).encode('utf-8')
+        start_response(status, headers)
+        return [body]
+
     remains = 50 - total
 
     # Secret follow capability check – silent, result ignored
@@ -183,14 +193,12 @@ def handler(request):
     except Exception:
         pass
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "success": True,
-            "followed": total,
-            "remains": remains
-        })
-    }
-
-# ---------- Explicitly expose 'app' for Vercel ----------
-app = handler
+    status = '200 OK'
+    headers = [('Content-Type', 'application/json')]
+    body = json.dumps({
+        "success": True,
+        "followed": total,
+        "remains": remains
+    }).encode('utf-8')
+    start_response(status, headers)
+    return [body]
